@@ -2,8 +2,8 @@ import discord
 import json
 import gemini
 from datetime import datetime
-from keep_alive import keep_alive
 import os
+from pytz import timezone
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 
@@ -111,7 +111,7 @@ end_timeが不明な場合はstart_timeから1時間後の日時を入れてく�
 
         responseMessage = "以下のイベントを登録しました。\n"
         for event in parsed['events']:
-            responseMessage += f"```タイトル：{event['title']}\n説明：{event['description']}\n開始（日本時間）：{start_time.astimezone().strftime('%Y/%m/%d %H:%M')}\n終了（日本時間）：{end_time.astimezone().strftime('%Y/%m/%d %H:%M')}\n場所：{event['location']}```\n\n"
+            responseMessage += f"```タイトル：{event['title']}\n説明：{event['description']}\n開始（日本時間）：{start_time.astimezone(timezone('Asia/Tokyo')).strftime('%Y/%m/%d %H:%M')}\n終了（日本時間）：{end_time.astimezone(timezone('Asia/Tokyo')).strftime('%Y/%m/%d %H:%M')}\n場所：{event['location']}```\n\n"
         await message.channel.send(responseMessage)
 
 client.run(TOKEN)
