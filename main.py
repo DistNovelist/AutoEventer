@@ -4,6 +4,7 @@ import gemini
 from datetime import datetime
 import os
 from pytz import timezone
+import io
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 
@@ -76,10 +77,12 @@ end_timeが不明な場合はstart_timeから1時間後の日時を入れてく�
             return
 
         responseMessage = "以下のイベントを登録しました。\n"
+        ical_text = ""
 
         try:
             # イベントを1つずつ取り出してdiscordのイベントとして登録
             for event in parsed['events']:
+                # UTCでの日時
                 start_time = datetime.strptime(event['start_time'], "%Y-%m-%dT%H:%M:%S%z")
                 end_time = datetime.strptime(event['end_time'], "%Y-%m-%dT%H:%M:%S%z")
                 title = event['title']
@@ -106,6 +109,19 @@ end_timeが不明な場合はstart_timeから1時間後の日時を入れてく�
                         await message.guild.create_scheduled_event(name=title, description=description, start_time=start_time, end_time=end_time, entity_type=entity_type, channel=channel, privacy_level=discord.PrivacyLevel.guild_only, image=image)
                     else:
                         await message.guild.create_scheduled_event(name=title, description=description, start_time=start_time, end_time=end_time, entity_type=entity_type, channel=channel, privacy_level=discord.PrivacyLevel.guild_only)
+
+                # icalendar形式で出力
+                ical_text += "BEGIN:VEVENT\n"
+                ical_text += f"SUMMARY:{title}\n"
+                ical_text += f"DESCRIPTION:{description}\n"
+                ical_text += f"DTSTART:{start_time.strftime('%Y%m%dT%H%M%SZ')}\n"
+                ical_text += f"DTEND:{end_time.strftime('%Y%m%dT%H%M%SZ')}\n"
+                if external:
+                    ical_text += f"LOCATION:{location}\n"
+                else:
+                    ical_text += f"LOCATION:Discord Voice Channel\n"
+                ical_text += "END:VEVENT\n"
+
         except Exception as e:
             await message.channel.send("エラーが発生しました。Botの管理者に連絡してください。")
             # await message.channel.send("エラーが発生しました。Botの管理者に連絡してください。\n" + response + "\n" + str(e))
@@ -115,7 +131,15 @@ end_timeが不明な場合はstart_timeから1時間後の日時を入れてく�
         for event in parsed['events']:
             start_time = datetime.strptime(event['start_time'], "%Y-%m-%dT%H:%M:%S%z")
             end_time = datetime.strptime(event['end_time'], "%Y-%m-%dT%H:%M:%S%z")
+            # 日本時間に変換してログに追加
             responseMessage += f"```タイトル：{event['title']}\n説明：{event['description']}\n開始（日本時間）：{start_time.astimezone(timezone('Asia/Tokyo')).strftime('%Y/%m/%d %H:%M')}\n終了（日本時間）：{end_time.astimezone(timezone('Asia/Tokyo')).strftime('%Y/%m/%d %H:%M')}\n場所：{event['location']}```\n\n"
-        await message.channel.send(responseMessage)
+
+        # ical_textをメモリ上のファイルに一時保存してアップロード
+        with io.StringIO() as f:
+            f.write("BEGIN:VCALENDAR\nVERSION:2.0\n")
+            f.write(ical_text)
+            f.write("END:VCALENDAR\n")
+            f.seek(0)  # ファイルポインタを先頭に戻す
+            await message.channel.send(responseMessage, file=discord.File(fp=f, filename="event.ics"))
 
 client.run(TOKEN)
