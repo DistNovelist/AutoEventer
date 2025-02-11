@@ -75,6 +75,8 @@ end_timeが不明な場合はstart_timeから1時間後の日時を入れてく�
             await message.channel.send("イベントが見つかりませんでした。")
             return
 
+        responseMessage = "以下のイベントを登録しました。\n"
+
         try:
             # イベントを1つずつ取り出してdiscordのイベントとして登録
             for event in parsed['events']:
@@ -111,6 +113,8 @@ end_timeが不明な場合はstart_timeから1時間後の日時を入れてく�
 
         responseMessage = "以下のイベントを登録しました。\n"
         for event in parsed['events']:
+            start_time = datetime.strptime(event['start_time'], "%Y-%m-%dT%H:%M:%S%z")
+            end_time = datetime.strptime(event['end_time'], "%Y-%m-%dT%H:%M:%S%z")
             responseMessage += f"```タイトル：{event['title']}\n説明：{event['description']}\n開始（日本時間）：{start_time.astimezone(timezone('Asia/Tokyo')).strftime('%Y/%m/%d %H:%M')}\n終了（日本時間）：{end_time.astimezone(timezone('Asia/Tokyo')).strftime('%Y/%m/%d %H:%M')}\n場所：{event['location']}```\n\n"
         await message.channel.send(responseMessage)
 
