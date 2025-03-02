@@ -28,8 +28,8 @@ async def on_message(message):
         image = None
         if message.attachments != None:
             for attachment in message.attachments:
-                print("attachment")
-                print(attachment.content_type)
+                # print("attachment")
+                # print(attachment.content_type)
                 if attachment.content_type.startswith('image/'):
                     image = await attachment.read()
                     break
@@ -50,7 +50,7 @@ end_timeが不明な場合はstart_timeから1時間後の日時を入れてく�
 イベントについて記述したメッセージ：「{str.strip(message.content[3:])}」"""
         if message.reference != None:
             reference = await message.channel.fetch_message(message.reference.message_id)
-            print(f'{reference.channel}: {reference.author}: {reference.author.name}: {reference.content}')
+            # print(f'{reference.channel}: {reference.author}: {reference.author.name}: {reference.content}')
             input += f"\n返信先のメッセージ送信者：{reference.author.name}\n返信先のメッセージ：「{reference.content}」"
             # 画像がまだ設定されておらず返信先のメッセージに画像が添付されている場合は初めの一枚を取得
             if image == None and reference.attachments:
@@ -105,7 +105,7 @@ end_timeが不明な場合はstart_timeから1時間後の日時を入れてく�
                     if event['location'][-1]=="/":
                         event['location'] = event['location'][:-1]
                     event['location'] = event['location'].split('/')[-1]
-                    print(event['location'])
+                    # print(event['location'])
                     channel = message.guild.get_channel(int(event['location']))
                     if not dm: # DMの場合はイベントを作成出来ないので登録を無視
                         if image != None:
