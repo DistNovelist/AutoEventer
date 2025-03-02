@@ -1,8 +1,8 @@
 from google import genai
 import os
 
-def hoge():
-    return 'hoge'
+def check():
+    return 'Gemini is ready'
 
 def getResponse(message):
 

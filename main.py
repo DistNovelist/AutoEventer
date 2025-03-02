@@ -13,7 +13,7 @@ client = discord.Client(intents=discord.Intents.all())
 @client.event
 async def on_ready():
     print('Bot is ready')
-    print(gemini.hoge())
+    print(gemini.check())
 
 @client.event
 async def on_message(message):
