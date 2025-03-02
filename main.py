@@ -20,11 +20,10 @@ async def on_message(message):
     # print(f'{message.channel}: {message.author}: {message.author.name}: {message.content}')
     if message.author == client.user:
         return
-    # if message.reference != None:
-    #     reference = await message.channel.fetch_message(message.reference.message_id)
-    #     print(f'→{reference.channel}: {reference.author}: {reference.author.name}: {reference.content}')
-
-    if message.content.startswith('!ev'):
+    if message.author.bot:
+        return
+    dm = (type(message.channel) == discord.DMChannel) and (client.user == message.channel.me)
+    if dm or message.content.startswith('!ev'):
         # メッセージに画像が添付されている場合は初めの一枚を取得
         image = None
         if message.attachments != None:
@@ -94,10 +93,11 @@ end_timeが不明な場合はstart_timeから1時間後の日時を入れてく�
                     entity_type = discord.EntityType.external
                     location = event['location']  # 任意の場所
                     channel = None
-                    if image != None:
-                        await message.guild.create_scheduled_event(name=title, description=description, start_time=start_time, end_time=end_time, entity_type=entity_type, location=location, privacy_level=discord.PrivacyLevel.guild_only, image=image)
-                    else:
-                        await message.guild.create_scheduled_event(name=title, description=description, start_time=start_time, end_time=end_time, entity_type=entity_type, location=location, privacy_level=discord.PrivacyLevel.guild_only)
+                    if not dm: # DMの場合はイベントを作成出来ないので登録を無視
+                        if image != None:
+                            await message.guild.create_scheduled_event(name=title, description=description, start_time=start_time, end_time=end_time, entity_type=entity_type, location=location, privacy_level=discord.PrivacyLevel.guild_only, image=image)
+                        else:
+                            await message.guild.create_scheduled_event(name=title, description=description, start_time=start_time, end_time=end_time, entity_type=entity_type, location=location, privacy_level=discord.PrivacyLevel.guild_only)
                 else:
                     entity_type = discord.EntityType.voice
                     location = None
@@ -107,10 +107,11 @@ end_timeが不明な場合はstart_timeから1時間後の日時を入れてく�
                     event['location'] = event['location'].split('/')[-1]
                     print(event['location'])
                     channel = message.guild.get_channel(int(event['location']))
-                    if image != None:
-                        await message.guild.create_scheduled_event(name=title, description=description, start_time=start_time, end_time=end_time, entity_type=entity_type, channel=channel, privacy_level=discord.PrivacyLevel.guild_only, image=image)
-                    else:
-                        await message.guild.create_scheduled_event(name=title, description=description, start_time=start_time, end_time=end_time, entity_type=entity_type, channel=channel, privacy_level=discord.PrivacyLevel.guild_only)
+                    if not dm: # DMの場合はイベントを作成出来ないので登録を無視
+                        if image != None:
+                            await message.guild.create_scheduled_event(name=title, description=description, start_time=start_time, end_time=end_time, entity_type=entity_type, channel=channel, privacy_level=discord.PrivacyLevel.guild_only, image=image)
+                        else:
+                            await message.guild.create_scheduled_event(name=title, description=description, start_time=start_time, end_time=end_time, entity_type=entity_type, channel=channel, privacy_level=discord.PrivacyLevel.guild_only)
 
                 # icalendar形式で出力
                 ical_text += "BEGIN:VEVENT\n"
@@ -129,7 +130,10 @@ end_timeが不明な場合はstart_timeから1時間後の日時を入れてく�
             # await message.channel.send("エラーが発生しました。Botの管理者に連絡してください。\n" + response + "\n" + str(e))
             return
 
-        responseMessage = "以下のイベントを登録しました。\n"
+        if dm: # DMの場合はイベントを作成出来ないので登録を無視
+            responseMessage = "以下の内容のスケジュールファイルを作成しました。\n"
+        else:
+            responseMessage = "以下のイベントを登録しました。\n"
         for event in parsed['events']:
             start_time = datetime.strptime(event['start_time'], "%Y-%m-%dT%H:%M:%S%z")
             end_time = datetime.strptime(event['end_time'], "%Y-%m-%dT%H:%M:%S%z")
