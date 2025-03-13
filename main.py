@@ -55,7 +55,7 @@ end_timeが不明な場合はstart_timeから1時間後の日時を入れてく�
                         image = await attachment.read()
                         break
         input += f"""\nメッセージの送信者：{message.author.name}
-イベントについて記述したメッセージ：「{str.strip(message.content[3:])}」"""
+イベントについて記述したメッセージ：「{message.content.replace('!ev','').strip()}」"""
         response = str.strip(gemini.getResponse(input))
 
         # responseを解釈して、日付、タイトル、説明文を取り出す
