@@ -5,6 +5,7 @@ from datetime import datetime
 import os
 from pytz import timezone
 import io
+import db
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 
@@ -13,7 +14,7 @@ client = discord.Client(intents=discord.Intents.all())
 @client.event
 async def on_ready():
     print('Bot is ready')
-    print(gemini.check())
+    db.init_db()
 
 @client.event
 async def on_message(message):
@@ -23,6 +24,14 @@ async def on_message(message):
     if message.author.bot:
         return
     dm = (type(message.channel) == discord.DMChannel) and (client.user == message.channel.me)
+    
+    # 以降はGeminiを用いるので、制限を確認
+    user_id = str(message.author.id)
+    allowed, error_message = db.check_limits(user_id)
+    if not allowed:
+        await message.channel.send(error_message)
+        return
+    
     if dm or message.content.startswith('!ev'):
         # メッセージに画像が添付されている場合は初めの一枚を取得
         image = None

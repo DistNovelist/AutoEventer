@@ -1,9 +1,6 @@
 from google import genai
 import os
 
-def check():
-    return 'Gemini is ready'
-
 def getResponse(message):
 
     client = genai.Client(
