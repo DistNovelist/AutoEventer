@@ -116,7 +116,7 @@ end_timeが不明な場合はstart_timeから1時間後の日時を入れてく�
                 # icalendar形式で出力
                 ical_text += "BEGIN:VEVENT\n"
                 ical_text += f"SUMMARY:{title}\n"
-                description_replaced = description.replace('\r', '').replace('\n', '\\r\\n')
+                description_replaced = description.replace('\r', '').replace('\n', '\\n')
                 ical_text += f"DESCRIPTION:{description_replaced}\n"
                 ical_text += f"DTSTART:{start_time.strftime('%Y%m%dT%H%M%SZ')}\n"
                 ical_text += f"DTEND:{end_time.strftime('%Y%m%dT%H%M%SZ')}\n"
