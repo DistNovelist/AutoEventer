@@ -44,29 +44,28 @@ async def on_message(message):
                     break
 
         d = datetime.now()
-        input = f"""次のイベントの内容を解釈し、日時、タイトル、説明文、開催場所等の情報を自動的に生成し、JSON形式で返してください。
+        input = f"""次のイベントの内容を解釈し、日時、タイトル、説明文、開催場所等の情報を生成し、JSON形式で返してください。
 出力はJSON文のみとし、1日ごとにイベントを区切り、"events"キーの配列に1つずつ"start_time"、"end_time"、"title"、"description"、"external"、"location"を含んだJSONオブジェクトを格納する形にしてください。
 イベントが1つだけでも要素1の配列にし、イベントが存在しない場合は空の配列にすること。
 descriptionは箇条書きで簡潔にまとめてください。ただし配列にせず、改行コードを含めた文字列で記述してください。
-ただし、プロンプトで与えられた日時は日本標準時ですが、start_timeとend_timeは「%Y-%m-%dT%H:%M:%SZ」形式のUTCで書いてください。
+ただし、プロンプトで与えられた日時は日本標準時(協定世界時-9時間の時差)ですが、start_timeとend_timeは「%Y-%m-%dT%H:%M:%SZ」形式のUTCで書いてください。
 end_timeが不明な場合はstart_timeから1時間後の日時を入れてください。
 
 現在の日本標準時での日時は{d.strftime('%Y/%m/%d %H:%M:%S')}です。
 開催日時が明示的に過去である場合を除いて、start_timeは現在時刻よりも後の日時を想定しています。したがって、start_time、end_timeが現在日時よりも過去の場合のみ、1年後など現在時刻よりも後の日時を設定してください。
 なお、同じ月でも現在日時よりあとの日付の場合は、今年のデータとしてください。
-また、開催場所は、明示的にdiscordのボイスチャンネルが貼られた場合は"external"をfalseにして"location"にチャンネルURLを文字列で格納、それ以外の場合は"external"にtrueを入れて"location"にもっともらしい場所の名前やURLの文字列（完全に不明なら「不明」）を格納してください。
-メッセージの送信者：{message.author.name}
-イベントについて記述したメッセージ：「{str.strip(message.content[3:])}」"""
+また、開催場所は、明示的にdiscordのボイスチャンネルが貼られた場合は"external"をfalseにして"location"にチャンネルURLを文字列で格納、それ以外の場合は"external"にtrueを入れて"location"にもっともらしい場所の名前やURLの文字列（完全に不明なら「不明」）を格納してください。"""
         if message.reference != None:
             reference = await message.channel.fetch_message(message.reference.message_id)
-            # print(f'{reference.channel}: {reference.author}: {reference.author.name}: {reference.content}')
-            input += f"\n返信先のメッセージ送信者：{reference.author.name}\n返信先のメッセージ：「{reference.content}」"
+            input += f"\n\n返信先のメッセージ送信者：{reference.author.name}\n返信先のメッセージ：「{reference.content}」\n\n次がメッセージ本文です。返信先に対する指示がある場合、それに従ってください。"
             # 画像がまだ設定されておらず返信先のメッセージに画像が添付されている場合は初めの一枚を取得
             if image == None and reference.attachments:
                 for attachment in reference.attachments:
                     if attachment.content_type.startswith('image/'):
                         image = await attachment.read()
                         break
+        input += f"""\nメッセージの送信者：{message.author.name}
+イベントについて記述したメッセージ：「{str.strip(message.content[3:])}」"""
         response = str.strip(gemini.getResponse(input))
 
         # responseを解釈して、日付、タイトル、説明文を取り出す
