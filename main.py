@@ -4,11 +4,51 @@ import logging
 from google import genai
 from google.genai.types import GenerateContentConfig, HarmCategory, HarmBlockThreshold, SafetySetting
 from google.oauth2 import service_account
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from pytz import timezone
+import pytz
 import io
 import traceback
+import re
+
+
+def _parse_utc_datetime(value: str) -> datetime:
+    """AI出力の日時文字列をUTCのaware datetimeに変換する。"""
+    if not isinstance(value, str):
+        raise TypeError("start_time/end_time は文字列である必要があります")
+
+    s = value.strip()
+    if not s:
+        raise ValueError("start_time/end_time が空です")
+
+    # 末尾ZはUTCとして扱う（datetime.fromisoformat はZ非対応）
+    if s.endswith("Z") or s.endswith("z"):
+        s = s[:-1] + "+00:00"
+
+    # +0000 / -0900 のようなオフセットを +00:00 形式へ正規化
+    if re.search(r"[+-]\d{4}$", s):
+        s = s[:-2] + ":" + s[-2:]
+
+    # 秒が省略されがちな入力を吸収する
+    m_no_tz = re.fullmatch(r"(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::(\d{2}))?", s)
+    if m_no_tz:
+        date_part, hm_part, sec_part = m_no_tz.group(1), m_no_tz.group(2), m_no_tz.group(3)
+        sec = sec_part if sec_part is not None else "00"
+        s = f"{date_part}T{hm_part}:{sec}+00:00"
+    else:
+        m_with_tz = re.fullmatch(
+            r"(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::(\d{2}))?([+-]\d{2}:\d{2})",
+            s,
+        )
+        if m_with_tz and m_with_tz.group(3) is None:
+            date_part, hm_part, tz_part = m_with_tz.group(1), m_with_tz.group(2), m_with_tz.group(4)
+            s = f"{date_part}T{hm_part}:00{tz_part}"
+
+    dt = datetime.fromisoformat(s)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=pytz.UTC)
+    return dt.astimezone(pytz.UTC)
 
 # ロギング設定
 logging.basicConfig(
@@ -88,7 +128,8 @@ async def on_message(message):
                     image = await attachment.read()
                     break
 
-        d = datetime.now()
+        # ユーザーへの前提通り、日本標準時を明示してモデルに渡す
+        d = datetime.now(timezone('Asia/Tokyo'))
         
         # システムプロンプト(固定の指示部分)
         system_instruction = [
@@ -96,28 +137,32 @@ async def on_message(message):
             'あなたはイベント情報抽出の専門家です。与えられたメッセージからイベントの詳細を抽出し、JSON形式で出力します。',
             '',
             '# 出力形式',
-            '出力はJSON文のみとし、1日ごとにイベントを区切り、"events"キーの配列に1つずつ"start_time"、"end_time"、"title"、"description"、"external"、"location"を含んだJSONオブジェクトを格納する形にしてください。',
+            '出力はJSON文のみとし、トップレベルに"events"キー（配列）を持たせ、その配列にイベントを1つずつJSONオブジェクトとして格納してください。各イベントは"start_time"、"end_time"、"title"、"description"、"external"、"location"を必ず含めてください。',
             'イベントが1つだけでも要素1の配列にし、イベントが存在しない場合は空の配列にしてください。',
             'また、出力はjsonのプレーンテキストとし、コードブロックで囲んだりしないでください。',
             '',
             '# フィールドの詳細',
-            '- start_time, end_time: "%Y-%m-%dT%H:%M:%SZ"形式のUTC時刻で記述',
+            '- start_time, end_time: "YYYY-MM-DDTHH:MM:SSZ"（UTC、末尾Z）で記述',
             '- title: イベントのタイトル',
             '- description: 箇条書きで簡潔にまとめた説明文(配列ではなく改行コードを含めた文字列)',
             '- external: 入力テキスト内に "https://discord.com/channels/" で始まる具体的なURLが明記されている場合のみ false。それ以外はすべて true',
             '- location: externalがfalseの場合はそのチャンネルURL。trueの場合は場所の名前やURL(不明なら「不明」)。決して入力にないURLを捏造しないこと',
             '',
             '# 日時の扱い',
-            '- プロンプトで与えられる日時は日本標準時(UTC+9)',
-            '- end_timeが不明な場合はstart_timeから1時間後の日時を設定',
-            '- 開催日時が明示的に過去である場合を除き、start_timeは現在時刻よりも後の日時を想定',
-            '- start_time、end_timeが現在日時よりも過去の場合のみ、1年後など現在時刻よりも後の日時を設定',
-            '- 同じ月でも現在日時よりあとの日付の場合は、今年のデータとする',
+            '- ユーザーの入力で与えられる日時は、タイムゾーンが明示されている場合を除き、日本標準時(UTC+9)であるとする',
+            '  - UTCに変換してstart_time, end_timeを設定する',
+            '  - 例えば「2026年5月1日15時」とあれば、start_timeは「2026-05-01T06:00:00Z」となる',
+            '- end_timeが不明な場合はstart_timeから1時間後の日時を設定する',
+            '- 開催日時が明示的に過去である場合を除き、start_timeは現在時刻よりも後で、条件に合う最も近い日時を入力しているものとする',
+            '  - 例えば「5月1日15時」とあれば、現在の日時が2026年4月30日であっても「2026-05-01T06:00:00Z」となる',
+            '  - 同じ「5月1日15時」でも、現在の日時が2026年5月1日16時であれば「2027-05-01T06:00:00Z」となる',
+            '  - 現在の日時が2026年4月30日なら、「明日の10時」とあれば「2026-05-01T01:00:00Z」となる',
+            '  - 現在の日時が2026年4月30日なら、「10日の15時」とあれば「2026-05-10T06:00:00Z」となる',
             '',
             '# 注意事項',
-            '- URLの捏造禁止: 入力テキストに含まれていないURLを勝手に生成することは固く禁じます。',
-            '- Discordチャンネルの扱い: 「ボイスチャンネル」「VC」などの記述があっても、具体的なURL（https://discord.com/channels/...）が明記されていない限り、externalはtrueとし、locationにはその名称（例：「ボイスチャンネル」）を入れてください。',
-            '- 勝手に https://discord.com/channels/... のようなURLを作らないでください。',
+            '- URLの捏造禁止: 入力テキストに含まれていないURLは生成しないこと。',
+            '- Discordチャンネルの扱い: 「ボイスチャンネル」「VC」等があっても、具体的なURL（https://discord.com/channels/...）がない限り external=true とし、locationには名称（例：「ボイスチャンネル」）を入れること。',
+            '- 予備日の扱い: 予備の日程と明示されている場合、予備の日程もイベントとして出力すること。ただし、予備の日程であってもstart_time, end_timeは必ず設定すること。また、予備日のみタイトルの末尾に「（予備日）」と追加すること'
         ]
         
         # ユーザープロンプト(メッセージ内容)
@@ -139,7 +184,7 @@ async def on_message(message):
         # Gemini APIリクエスト
         try:
             response_obj = genai_client.models.generate_content(
-                model="gemini-2.5-flash-lite",
+                model="gemini-2.5-flash",
                 contents=user_prompt,
                 config=GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -186,8 +231,10 @@ async def on_message(message):
             # イベントを1つずつ取り出してdiscordのイベントとして登録
             for event in parsed['events']:
                 # UTCでの日時
-                start_time = datetime.strptime(event['start_time'], "%Y-%m-%dT%H:%M:%S%z")
-                end_time = datetime.strptime(event['end_time'], "%Y-%m-%dT%H:%M:%S%z")
+                start_time = _parse_utc_datetime(event['start_time'])
+                end_time = _parse_utc_datetime(event['end_time'])
+                if end_time <= start_time:
+                    end_time = start_time + timedelta(hours=1)
                 title = event['title']
                 description = event['description']
                 external = event['external']
@@ -259,8 +306,8 @@ async def on_message(message):
         else:
             responseMessage = "以下のイベントを登録しました。\n"
         for event in parsed['events']:
-            start_time = datetime.strptime(event['start_time'], "%Y-%m-%dT%H:%M:%S%z")
-            end_time = datetime.strptime(event['end_time'], "%Y-%m-%dT%H:%M:%S%z")
+            start_time = _parse_utc_datetime(event['start_time'])
+            end_time = _parse_utc_datetime(event['end_time'])
             # 日本時間に変換してログに追加
             responseMessage += f"```タイトル：{event['title']}\n説明：{event['description']}\n開始（日本時間）：{start_time.astimezone(timezone('Asia/Tokyo')).strftime('%Y/%m/%d %H:%M')}\n終了（日本時間）：{end_time.astimezone(timezone('Asia/Tokyo')).strftime('%Y/%m/%d %H:%M')}\n場所：{event['location']}```\n\n"
 
