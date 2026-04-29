@@ -247,6 +247,7 @@ async def on_message(message):
         ical_text = ""
 
         try:
+            external_lock = False # external=trueのイベントが出現した後はすべてexternal=trueとみなすロック
             # イベントを1つずつ取り出してdiscordのイベントとして登録
             for event in parsed['events']:
                 # UTCでの日時
@@ -256,11 +257,11 @@ async def on_message(message):
                     end_time = start_time + timedelta(hours=1)
                 title = event['title']
                 description = event['description']
-                external = event['external']
+                external = event['external'] or external_lock
 
                 # channelの存在確認
                 channel = None
-                if not external:
+                if not external and not dm: # external=falseかつDMでない場合のみチャンネル取得を試みる
                     try:
                         # idを抽出
                         _loc = str.strip(event['location'])
@@ -268,11 +269,13 @@ async def on_message(message):
                             _loc = _loc[:-1]
                         _loc = _loc.split('/')[-1]
                         channel = message.guild.get_channel(int(_loc))
-                    except (ValueError, TypeError):
+                    except Exception as e:
+                        logging.error(f"channel取得エラー: user={message.author.name}, error={str(e)}")
                         channel = None
 
                 if channel is None:
                     external = True
+                    external_lock = True
 
                 if external:
                     entity_type = discord.EntityType.external
